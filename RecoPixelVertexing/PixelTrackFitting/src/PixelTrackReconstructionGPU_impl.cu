@@ -79,9 +79,10 @@ __global__ void KernelFullFitAllHits(float * hits_and_covariances,
 
   Rfit::VectorNd rad = (hits.block(0, 0, 2, n).colwise().norm());
 
+  double factor = 1.0;
   Rfit::circle_fit circle = 
-    Rfit::Circle_fit(hits.block(0,0,2,n), hits_cov.block(0, 0, 2 * n, 2 * n),
-      fast_fit, rad, B, true, true);
+    Rfit::Circle_fit_Scatter(hits.block(0,0,2,n), hits_cov.block(0, 0, 2 * n, 2 * n),
+      fast_fit, rad, B, factor, true);
 
   if (DEBUG) {
     printf("KernelFullFitAllHits circle.par(0): %d %f\n", helix_start, circle.par(0));
@@ -89,7 +90,7 @@ __global__ void KernelFullFitAllHits(float * hits_and_covariances,
     printf("KernelFullFitAllHits circle.par(2): %d %f\n", helix_start, circle.par(2));
   }
 
-  Rfit::line_fit line = Rfit::Line_fit(hits, hits_cov, circle, fast_fit, true);
+  Rfit::line_fit line = Rfit::Line_fit_Scatter(hits, hits_cov, circle, fast_fit, B, factor, true);
 
   par_uvrtopak(circle, B, true);
 

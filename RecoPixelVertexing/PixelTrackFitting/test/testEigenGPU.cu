@@ -38,15 +38,16 @@ __global__ void kernelFullFit(Rfit::Matrix3xNd * hits,
      creations of the blocks. To be understood and compared against the myriad
      of compilation warnings we have.
      */
+  double factor = 1.0;
   (*circle_fit_resultsGPU) =
-    Rfit::Circle_fit(hits->block(0,0,2,n), hits_cov->block(0, 0, 2 * n, 2 * n),
-      fast_fit, rad, B, errors, scattering);
+    Rfit::Circle_fit_Scatter(hits->block(0,0,2,n), hits_cov->block(0, 0, 2 * n, 2 * n),
+      fast_fit, rad, B, factor, errors);
   /*
   (*circle_fit_resultsGPU) =
     Rfit::Circle_fit(hits2D_local, hits_cov2D_local,
       fast_fit, rad, B, errors, scattering);
    */
-  (*line_fit_resultsGPU) = Rfit::Line_fit(*hits, *hits_cov, *circle_fit_resultsGPU, fast_fit, errors);
+  (*line_fit_resultsGPU) = Rfit::Line_fit_Scatter(*hits, *hits_cov, *circle_fit_resultsGPU, fast_fit, B, factor,  errors);
 
   return;
 }
@@ -75,17 +76,20 @@ __global__ void kernelCircleFit(Rfit::Matrix3xNd * hits,
     printf("hits_cov(11,11): %f\n", (*hits_cov)(11,11));
     printf("B: %f\n", B);
   }
+  double factor = 1.0;
   (*circle_fit_resultsGPU) =
-    Rfit::Circle_fit(hits->block(0,0,2,n), hits_cov->block(0, 0, 2 * n, 2 * n),
-      *fast_fit_input, rad, B, false, false);
+    Rfit::Circle_fit_Scatter(hits->block(0,0,2,n), hits_cov->block(0, 0, 2 * n, 2 * n),
+      *fast_fit_input, rad, B, factor, false);
 }
 
 __global__ void kernelLineFit(Rfit::Matrix3xNd * hits,
                               Rfit::Matrix3Nd * hits_cov,
                               Rfit::circle_fit * circle_fit,
                               Vector4d * fast_fit,
+                              double B,
                               Rfit::line_fit * line_fit) {
-  (*line_fit) = Rfit::Line_fit(*hits, *hits_cov, *circle_fit, *fast_fit, true);
+  double factor = 1.0;
+  (*line_fit) = Rfit::Line_fit_Scatter(*hits, *hits_cov, *circle_fit, *fast_fit, B, factor, false);
 }
 
 void fillHitsAndHitsCov(Rfit::Matrix3xNd & hits, Rfit::Matrix3Nd & hits_cov) {
@@ -145,10 +149,10 @@ void testFit() {
   // CIRCLE_FIT CPU
   u_int n = hits.cols();
   Rfit::VectorNd rad = (hits.block(0, 0, 2, n).colwise().norm());
-
-  Rfit::circle_fit circle_fit_results = Rfit::Circle_fit(hits.block(0, 0, 2, n),
+  double factor = 1.0;
+  Rfit::circle_fit circle_fit_results = Rfit::Circle_fit_Scatter(hits.block(0, 0, 2, n),
       hits_cov.block(0, 0, 2 * n, 2 * n),
-      fast_fit_results, rad, B, false, false);
+      fast_fit_results, rad, B, factor, false);
   std::cout << "Fitted values (CircleFit):\n" << circle_fit_results.par << std::endl;
 
   // CIRCLE_FIT GPU
@@ -166,7 +170,7 @@ void testFit() {
   assert(isEqualFuzzy(circle_fit_results.par, circle_fit_resultsGPUret->par));
 
   // LINE_FIT CPU
-  Rfit::line_fit line_fit_results = Rfit::Line_fit(hits, hits_cov, circle_fit_results, fast_fit_results, true);
+  Rfit::line_fit line_fit_results = Rfit::Line_fit_Scatter(hits, hits_cov, circle_fit_results, fast_fit_results, B, factor, true);
   std::cout << "Fitted values (LineFit):\n" << line_fit_results.par << std::endl;
 
   // LINE_FIT GPU
@@ -175,7 +179,7 @@ void testFit() {
 
   cudaMalloc((void **)&line_fit_resultsGPU, sizeof(Rfit::line_fit));
 
-  kernelLineFit<<<1,1>>>(hitsGPU, hits_covGPU, circle_fit_resultsGPU, fast_fit_resultsGPU, line_fit_resultsGPU);
+  kernelLineFit<<<1,1>>>(hitsGPU, hits_covGPU, circle_fit_resultsGPU, fast_fit_resultsGPU, B, line_fit_resultsGPU);
   cudaDeviceSynchronize();
 
   cudaMemcpy(line_fit_resultsGPUret, line_fit_resultsGPU, sizeof(Rfit::line_fit), cudaMemcpyDeviceToHost);
@@ -195,13 +199,13 @@ void testFitOneGo(bool errors, bool scattering, double epsilon=1e-6) {
   // CIRCLE_FIT CPU
   u_int n = hits.cols();
   Rfit::VectorNd rad = (hits.block(0, 0, 2, n).colwise().norm());
-
-  Rfit::circle_fit circle_fit_results = Rfit::Circle_fit(hits.block(0, 0, 2, n), 
+  double factor = 1.0;
+  Rfit::circle_fit circle_fit_results = Rfit::Circle_fit_Scatter(hits.block(0, 0, 2, n), 
       hits_cov.block(0, 0, 2 * n, 2 * n),
-      fast_fit_results, rad, B, errors, scattering);
+      fast_fit_results, rad, B, factor, errors);
   // LINE_FIT CPU
-  Rfit::line_fit line_fit_results = Rfit::Line_fit(hits, hits_cov, circle_fit_results,
-      fast_fit_results, errors);
+  Rfit::line_fit line_fit_results = Rfit::Line_fit_Scatter(hits, hits_cov, circle_fit_results,
+      fast_fit_results, B, factor, errors);
 
   // FIT GPU
   std::cout << "GPU FIT" << std::endl;
